@@ -1,0 +1,14 @@
+<h3>Professor Not Found</h3>
+<h4>Did we make a mistake?</h4>
+If this professor does in fact have ratings and we missed it, please let us know.
+<button class="btn btn-default btn-xs error_form_button" onclick="showErrorForm(this)">Report an Error</button>
+
+<div class="error_form" style="display: none;">
+	<h4><span class="prof_name">INSERT NAME</span> with class <span class="class_name">INSERT CLASS</span></h4>
+	This has been reported as a possible error. <br><br>
+	<h4>Would you like to provide more information?</h4>
+	<textarea class="feedback_input" cols="40" rows="5" maxlength="400"></textarea><br>
+	<button class="btn btn-default btn-xs feedback_submit" onclick="submitErrorForm(this)">Submit More Information</button>
+	<p class="feedback_thanks" style="display: none;">Thank you for your response!</p>
+	<span class="userID" style="display: none"></span>
+</div>
