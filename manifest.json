@@ -1,12 +1,14 @@
 {
   "manifest_version": 2,
 
-  "name": "VT Prof Stats",
-  "version": "1.0",
+  "name": "Hokie Helper",
+  "version": "1.0.0",
   "description": "Retrieves and displays data from Rate My Professor, Koofers, and Anaanu for each professor on the VT course time table",
   "author": "Drayton Taylor and Stanton Parham",
   "icons": {
-    "19": "img/icon.png"
+    "16": "img/icon16.png",
+    "48": "img/icon48.png",
+    "128": "img/icon128.png"
   },
 
   "permissions": [
@@ -22,9 +24,9 @@
 
   "browser_action": {
     "default_icon": {
-      "19": "img/icon.png"
+      "16": "img/icon16.png"
     },
-    "default_title": "Display professor statistics"
+    "default_title": "Click to go to the VT course time table site"
   },
 
   "background": {
