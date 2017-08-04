@@ -1,0 +1,9 @@
+body {
+	min-width: 200px;
+	min-height: 300px;
+}
+
+#iframe_container,#iframe {
+	width: 100%x;
+	height: 100%;
+}

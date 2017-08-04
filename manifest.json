@@ -1,0 +1,70 @@
+{
+  "manifest_version": 2,
+
+  "name": "VT Prof Stats",
+  "version": "1.0",
+  "description": "Retrieves and displays data from Rate My Professor, Koofers, and Anaanu for each professor on the VT course time table",
+  "author": "Drayton Taylor and Stanton Parham",
+  "icons": {
+    "19": "img/icon.png"
+  },
+
+  "permissions": [
+    "activeTab",
+    "notifications",
+    "storage",
+    "http://www.ratemyprofessors.com/*",
+    "https://search-a.akamaihd.net/typeahead/suggest/*",
+    "http://search.mtvnservices.com/typeahead/suggest/*",
+    "http://anaanu.com/*",
+    "https://www.koofers.com/*"
+  ],
+
+  "browser_action": {
+    "default_icon": {
+      "19": "img/icon.png"
+    },
+    "default_title": "Display professor statistics"
+  },
+
+  "background": {
+    "scripts": [
+      "lib/jquery-3.2.1.min.js",
+      "js/background.js"
+    ],
+    "persistent": false
+  },
+
+  "content_scripts": [{
+    "matches": [
+      "https://banweb.banner.vt.edu/ssb/prod/*"
+    ],
+    "exclude_matches": [
+      "https://webapp4.asu.edu/catalog/",
+      "https://webapp4.asu.edu/catalog/?t=*",
+      "https://webapp4.asu.edu/catalog/course?s=*"
+    ],
+    "css": [
+      "css/content-script.css"
+    ],
+    "js": [
+      "lib/jquery-3.2.1.min.js",
+      "js/data-services.js",
+      "js/content-script.js"
+    ]
+  }],
+
+  "web_accessible_resources": [
+    "img/loading.gif",
+    "img/gold-star.png",
+    "html/table_headers.html",
+    "html/prof_rating.html",
+    "html/avg_gpa.html",
+    "js/data-services.js"
+  ],
+
+  "options_ui": {
+    "page": "options/options.html",
+    "chrome_style": true
+  }
+}

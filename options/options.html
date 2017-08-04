@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Prof Ratings Options</title>
+  <style>
+    body: { padding: 10px; }
+  </style>
+</head>
+
+<label>
+  <input type="checkbox" id="autorun">
+  Autorun extension on course catalog page
+</label>
+<br><br>
+
+<span style= "font-size: 95%; color: #555";>
+  If checked, the extension will run automatically when searching the course catalog. If not checked, 
+  the extension can be run manually by clicking the extension icon while searching the course catalog.
+</span>
+<br><br>
+
+<label>
+  <input type="checkbox" id="notify">
+  Send notification when extension is running
+</label>
+<br><br>
+
+<span style= "font-size: 95%; color: #555";>
+  If checked, a notification will be created each time the extension is run.
+</span>
+<br><br>
+
+<select id="show_param">
+  <option value='0'>Overall Quality</option>
+  <option value='1'>Level of Difficulty</option>
+</select>
+<br><br>
+
+<span style= "font-size: 95%; color: #555";>
+  Select which quality parameter is shown inline on a search results page.
+</span>
+<br><br>
+
+<div id="status"></div>
+<br>
+<button id="save">Save</button>
+
+<script src="options.js"></script>
+<script src="../js/jquery.js"></script>
+</body>
+</html>
