@@ -2,7 +2,11 @@
 - clean code
     - get rid of unused code from the ASU extension
 - Figure out a more robust way of adding the columns into the time table
-    - account for if comments is on
+    - account for if comments are on
+- When the user clicks the extension icon, have a few different things happen
+    - If they aren't on the time table page, take them to it
+    - Run/Rerun the content script on the page
+    - Allow them to enable/disable certain columns
 - Explain (in the description of the extension) that some data may be incorrect and users should not make final decisions for courses based on these statistics
     (Tell them to make sure to check the corresponding sites and verify the information displayed by the extension)
 - Document where all the potential weak points are for the program (basically the points at which parsing will break if ANYTHING changes with the sites the data is coming from)
