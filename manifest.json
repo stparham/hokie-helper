@@ -51,6 +51,7 @@
     ],
     "js": [
       "lib/jquery-3.2.1.min.js",
+      "lib/bin-search.js",
       "js/data-services.js",
       "js/content-script.js"
     ]

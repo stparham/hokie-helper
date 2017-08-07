@@ -1,8 +1,5 @@
-var hasRun = false;
-var userID = "";
-var notify = false;
-var preferredQualityArray = ['Overall_Quality', 'Difficulty'];
-var preferredQuality = 'Overall_Quality';
+var instructors = {};
+var courses = {};
 
 var messageDiv = document.createElement('div');
 messageDiv.id = "send_message_div";
@@ -15,7 +12,7 @@ document.body.appendChild(messageDiv);
 
 // Connects to First Background Function
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if(!hasRun && request.doAction) {
+  if(request.doAction) {
     sendResponse(true);
     checkStorageAndRunScript(true);
   } else {
@@ -23,31 +20,11 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   }
 });
 
-// returns the index at which the value is found based on the comparator function
-// returns -1 if the value is not found
-Array.prototype.binarySearch = function(valueToFind, comparator) {
-  return searchHelper(this, 0, this.length - 1, valueToFind);
-  function searchHelper(array, left, right, key) {
-    if (left > right) {
-      return -1;
-    }
-    var mid = Math.floor((left + right) / 2);
-    var comparison = comparator(array[mid], key);
-    if (comparison == 0) {
-      return mid;
-    }
-    if (comparison > 0) {
-      return searchHelper(array, left, mid - 1, key);
-    }
-    return searchHelper(array, mid + 1, right, key);
-  }
-}
-
-function rmpSearchComparator(arrVal, valToFind) {
+function rmpSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.teacherlastname_t.toLowerCase();
   var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
-  if (arrValLastName == valToFindLastName) {
+  if (valToFindLastName == arrValLastName) {
     if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
       return 0;
     } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
@@ -55,20 +32,20 @@ function rmpSearchComparator(arrVal, valToFind) {
     }
     return -1;
   }
-  if (arrValLastName > valToFindLastName) {
+  if (valToFindLastName > arrValLastName) {
     return 1;
   } else {
     return -1;
   }
 }
 
-function anaanuSearchComparator(arrVal, valToFind) {
+function anaanuSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.instructor.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
-  if (arrValLastName == valToFindLastName) {
+  if (valToFindLastName == arrValLastName) {
     return 0;
   }
-  if (arrValLastName > valToFindLastName) {
+  if (valToFindLastName > arrValLastName) {
     return 1;
   }
   return -1;
@@ -133,17 +110,16 @@ function runScript() {
   chrome.storage.sync.get('notify', function(items) {
     if (items.notify == true) {
       var options = {
-        body: "VT Prof Stats is now running on this page. To change this behavior, go to the options page.",
+        body: "Hokie Helper is now running on this page. To change this behavior, go to the options page.",
         icon: chrome.extension.getURL("imgs/icon.png")
       }
-      var n = new Notification("VT Prof Stats", options);
+      var n = new Notification("Hokie Helper", options);
       setTimeout(function(){n.close();}, 5000);
     }
   });
 
 
-  var instructors = {};
-  var courses = {};
+
 
   // get the column before the point of injection for the new statistics headers
   var instructorHeader = $(".dataentrytable > tbody > tr:first-of-type > td:nth-of-type(7)");
@@ -154,6 +130,24 @@ function runScript() {
   for (var i = 0; i < tableHeaderTemplates.length; i++) {
     prev = $(tableHeaderTemplates[i]).insertAfter(prev);
   }
+
+  // extra rows that just get in the way of things (but I still have to put blank cells in them)
+  var otherRows = [];
+  // the rows that could potentially have data added to them
+  var dataRows = [];
+  // regular expression for evaluating course code format
+  var courseCodeRegex = new RegExp("[A-Z]{2,4}-[0-9]{4}");
+  // iterates over every row in the table except the first one (the column headers)
+  $(".dataentrytable > tbody > tr:not(:first-child)").each(function(idx) {
+    var hasValidCourseCode = courseCodeRegex.test(this.cells[1].innerText);
+    if (hasValidCourseCode) {
+      dataRows.push(this);
+    } else {
+      otherRows.push(this);
+    }
+  });
+  console.log(dataRows);
+  console.log(otherRows);
 
   // get the columns containing course and instructor information
   var courseCodeCol = $(".dataentrytable > tbody > tr > td:nth-of-type(2)");
@@ -307,7 +301,7 @@ function runScript() {
           $(rmpDataCol[curCellNum]).animate({opacity: 1}, 1000);
         }
       }
-      console.log(instructors);
+      // console.log(instructors);
     })
     .catch(function(error) {
       console.log("ERROR Getting RMP Data: ");
