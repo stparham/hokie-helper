@@ -1,18 +1,14 @@
+/** The data columns to include in the current page; */
+var colsToInclude = ["rmp", "anaanu"];
+
+/** All the instructor data on the page; */
 var instructors = {};
+/** All the course data on the page; */
 var courses = {};
 
-var messageDiv = document.createElement('div');
-messageDiv.id = "send_message_div";
-messageDiv.hidden = true;
-
-messageDiv.addEventListener('sendMessage', function() {
-  chrome.runtime.sendMessage(JSON.parse(this.innerHTML));
-});
-document.body.appendChild(messageDiv);
-
-// Connects to First Background Function
+// listen for messages from the background page
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if(request.doAction) {
+  if (request.doAction) {
     sendResponse(true);
     checkStorageAndRunScript(true);
   } else {
@@ -20,117 +16,50 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   }
 });
 
-function rmpSearchComparator(valToFind, arrVal) {
-  var arrValLastName = arrVal.teacherlastname_t.toLowerCase();
-  var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
-  var valToFindLastName = valToFind.lastName.toLowerCase();
-  if (valToFindLastName == arrValLastName) {
-    if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
-      return 0;
-    } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
-      return 1;
-    }
-    return -1;
-  }
-  if (valToFindLastName > arrValLastName) {
-    return 1;
-  } else {
-    return -1;
-  }
-}
+// resources
+var loadingAnimationURL = chrome.extension.getURL("img/loading.gif");
+var headerTemplates = {};
+var cellTemplates = {};
 
-function anaanuSearchComparator(valToFind, arrVal) {
-  var arrValLastName = arrVal.instructor.toLowerCase();
-  var valToFindLastName = valToFind.lastName.toLowerCase();
-  if (valToFindLastName == arrValLastName) {
-    return 0;
-  }
-  if (valToFindLastName > arrValLastName) {
-    return 1;
-  }
-  return -1;
-}
-
-function sortComparator(val1, val2) {
-  var lastName1 = val1.teacherlastname_t.toLowerCase();
-  var firstName1 = val1.teacherfirstname_t.toLowerCase();
-  var lastName2 = val2.teacherlastname_t.toLowerCase();
-  var firstName2 = val2.teacherfirstname_t.toLowerCase();
-  if (lastName1 == lastName2) {
-    if (firstName1.charAt(0) == firstName2.charAt(0)) {
-      return 0;
-    } else if (firstName1.charAt(0) > firstName2.charAt(0)) {
-      return 1;
-    }
-    return -1;
-  }
-  if (lastName1 > lastName2) {
-    return 1;
-  } else {
-    return -1;
-  }
-}
-
-readyScript();
-
-var profRatingTemplate;
-var courseGPATemplate;
-var tableHeaderTemplates;
-var loadingAnimation = chrome.extension.getURL("img/loading.gif");
-function readyScript() {
+// load resource files
+(function() {
   $.when(
-    $.get(chrome.extension.getURL('/html/prof_rating.html'), function(data) {
-      profRatingTemplate = data;
+    // load all of the cell templates
+    $.get(chrome.runtime.getURL('/html/table_cells.html'), function(data) {
+      // get the div elements from the html data
+      $("div", $('<div></div>').html(data)).each(function(idx) {
+        // set the cell elements in the cellTemplates object based on their type
+        var typeOfCell = this.dataset.hhCellType;
+        cellTemplates[typeOfCell] = this;
+      });
     }),
-    $.get(chrome.extension.getURL('/html/avg_gpa.html'), function(data) {
-      courseGPATemplate = data;
-    }),
-    $.get(chrome.extension.getURL('/html/table_headers.html'), function(data) {
-      var el = $('<div></div>');
-      el.html(data);
-      tableHeaderTemplates = $('td', el);
+    // load all of the header templates
+    $.get(chrome.runtime.getURL('/html/table_headers.html'), function(data) {
+      // get the table data elements from the html data
+      $("td", $('<div></div>').html(data)).each(function(idx) {
+        // set the header elements in the headerTemplates object based on their type
+        var typeOfHeader = this.dataset.hhCellType;
+        headerTemplates[typeOfHeader] = this;
+      });
     })
   ).then(function() {
+    console.log("DONE GETTING RESOURCES");
     runScript();
   });
-}
+})();
 
 function runScript() {
-  // Get the current version number from the manifest and manually set
-  // the platform as Chrome
-  var manifestData = chrome.runtime.getManifest();
-  var platform = "Chrome";
-  var version = manifestData.version;
-
-
-  /////////////////////
-  /// NOTIFICATIONS ///
-  /////////////////////
-  Notification.requestPermission();
-  chrome.storage.sync.get('notify', function(items) {
-    if (items.notify == true) {
-      var options = {
-        body: "Hokie Helper is now running on this page. To change this behavior, go to the options page.",
-        icon: chrome.extension.getURL("imgs/icon.png")
-      }
-      var n = new Notification("Hokie Helper", options);
-      setTimeout(function(){n.close();}, 5000);
-    }
-  });
-
-
-
-
   // get the column before the point of injection for the new statistics headers
   var instructorHeader = $(".dataentrytable > tbody > tr:first-of-type > td:nth-of-type(7)");
   if (typeof instructorHeader[0] == 'undefined') return;
 
   // insert table headers
   var prev = instructorHeader;
-  for (var i = 0; i < tableHeaderTemplates.length; i++) {
-    prev = $(tableHeaderTemplates[i]).insertAfter(prev);
+  for (var i = 0; i < colsToInclude.length; i++) {
+    prev = $(headerTemplates[colsToInclude[i]]).insertAfter(prev);
   }
 
+  var headerRow = $(".dataentrytable > tbody > tr:first-child");
   // extra rows that just get in the way of things (but I still have to put blank cells in them)
   var otherRows = [];
   // the rows that could potentially have data added to them
@@ -146,8 +75,10 @@ function runScript() {
       otherRows.push(this);
     }
   });
-  console.log(dataRows);
-  console.log(otherRows);
+  // console.log(dataRows);
+  // console.log(otherRows);
+
+
 
   // get the columns containing course and instructor information
   var courseCodeCol = $(".dataentrytable > tbody > tr > td:nth-of-type(2)");
@@ -162,7 +93,7 @@ function runScript() {
   for (var i = 1; i < instructorCol.length; i++) { // start at 1 to avoid column headers
     // create enough new cells for the headers (one for RMP, Anaanu, and potentially Koofers)
     var newCells = [];
-    for (var j = 0; j < tableHeaderTemplates.length; j++) {
+    for (var j = 0; j < colsToInclude.length; j++) {
       var newCell = document.createElement("td");
       newCell.className = "RMPtd dedefault";
       newCells.push(newCell);
@@ -182,7 +113,7 @@ function runScript() {
       for (var cell of newCells) {
         // add loading bar animations for the cell while information is retrieved
         var node = document.createElement("img");
-        node.src = loadingAnimation;
+        node.src = loadingAnimationURL;
         node.className = 'RMPimg';
         cell.appendChild(node);
         // insert the cell into the row
@@ -274,10 +205,7 @@ function runScript() {
   function getData() {
     console.log("Getting RMP Data");
     // DataService is loaded from data-services.js
-    DataService.getRMPRatings().then(function(response) {
-      var results = response.docs;
-      results.sort(sortComparator);
-
+    DataService.getRMPRatings().then(function(results) {
       for (var inst in instructors) {
         // update instructor objects with data from results
         var resultsIdx = -1;
@@ -383,27 +311,25 @@ function runScript() {
 
 
 function fillProfRatingTemplate(profData) {
-  var div = document.createElement('div');
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
-  div.innerHTML = profRatingTemplate.slice();
-  $(div).find(".RMPa").attr('href', profData.rmpURL);
-  $(div).find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
-  $(div).find(".RMPatext").html(profData.rating);
-  $(div).find(".tooltiptext").html(profData.rating + " / 5 Rating");
+  var cell = $(cellTemplates["rmp"]).clone();
+  cell.find(".RMPa").attr('href', profData.rmpURL);
+  cell.find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
+  cell.find(".RMPatext").html(profData.rating);
+  cell.find(".tooltiptext").html(profData.rating + " / 5 Rating");
 
-  return div.innerHTML;
+  return cell.prop('outerHTML');
 }
 
 function fillCourseGPATemplate(courseData) {
-  var div = document.createElement('div');
   var ratingColor = (courseData.hasGPA) ? getGPAColor(courseData.avgGPA) : 'CCC';
-  div.innerHTML = courseGPATemplate.slice();
-  $(div).find(".RMPa").attr('href', courseData.anaanuURL);
-  $(div).find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
-  $(div).find(".RMPatext").html(courseData.avgGPA);
-  $(div).find(".tooltiptext").html(courseData.avgGPA + " / 4.0 Avg. GPA");
+  var cell = $(cellTemplates["anaanu"]).clone();
+  cell.find(".RMPa").attr('href', courseData.anaanuURL);
+  cell.find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
+  cell.find(".RMPatext").html(courseData.avgGPA);
+  cell.find(".tooltiptext").html(courseData.avgGPA + " / 4.0 Avg. GPA");
 
-  return div.innerHTML;
+  return cell.prop('outerHTML');
 }
 
 function getRatingColor(rating) {
@@ -419,14 +345,44 @@ function getGPAColor(gpa) {
     "light green": '4EEB51',
     "dark green": '00B13D'
   };
-  if (gpa >= 3.5) {
-    return colors["dark green"];
-  } else if (gpa >= 3.00) {
-    return colors["light green"];
-  } else if (gpa >= 2.5) {
-    return colors["yellow"];
-  } else if (gpa >= 2.00) {
-    return colors["orange"];
-  }
+  if (gpa >= 3.5) return colors["dark green"];
+  else if (gpa >= 3.00) return colors["light green"];
+  else if (gpa >= 2.5) return colors["yellow"];
+  else if (gpa >= 2.00) return colors["orange"];
   return colors["red"];
+}
+
+
+
+/////////////////// Comparator Functions
+
+function rmpSearchComparator(valToFind, arrVal) {
+  var arrValLastName = arrVal.teacherlastname_t.toLowerCase();
+  var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
+  var valToFindLastName = valToFind.lastName.toLowerCase();
+  if (valToFindLastName == arrValLastName) {
+    if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
+      return 0;
+    } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
+      return 1;
+    }
+    return -1;
+  }
+  if (valToFindLastName > arrValLastName) {
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
+function anaanuSearchComparator(valToFind, arrVal) {
+  var arrValLastName = arrVal.instructor.toLowerCase();
+  var valToFindLastName = valToFind.lastName.toLowerCase();
+  if (valToFindLastName == arrValLastName) {
+    return 0;
+  }
+  if (valToFindLastName > arrValLastName) {
+    return 1;
+  }
+  return -1;
 }

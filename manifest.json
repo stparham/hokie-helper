@@ -59,10 +59,8 @@
 
   "web_accessible_resources": [
     "img/loading.gif",
-    "img/gold-star.png",
     "html/table_headers.html",
-    "html/prof_rating.html",
-    "html/avg_gpa.html",
+    "html/table_cells.html",
     "js/data-services.js"
   ],
 
