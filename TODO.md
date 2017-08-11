@@ -1,8 +1,5 @@
 ## General
-- clean code
-    - get rid of unused code from the ASU extension
-- Figure out a more robust way of adding the columns into the time table
-    - account for if comments are on
+- change all for-in loops for objects to Object.keys(obj).forEach(function(key) {}); loops
 - When the user clicks the extension icon, have a few different things happen
     - If they aren't on the time table page, take them to it
     - Run/Rerun the content script on the page

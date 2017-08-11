@@ -1,11 +1,3 @@
-/** The data columns to include in the current page; */
-var colsToInclude = ["rmp", "anaanu"];
-
-/** All the instructor data on the page; */
-var instructors = {};
-/** All the course data on the page; */
-var courses = {};
-
 // listen for messages from the background page
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.doAction) {
@@ -16,6 +8,24 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   }
 });
 
+/** The zero-based index of the course code column in the table; */
+const COURSE_CODE_COL_IDX = 1;
+/** The zero-based index of the instructor column in the table; */
+const INSTRUCTOR_COL_IDX = 6;
+
+/** The data columns to include in the current page; */
+var config = {
+  "colsToInclude": ["rmp", "anaanu"]
+};
+
+// new columns that will be populated by data from RMP, Koofers, and Anaanu
+var dataCols = {};
+
+/** All the instructor data on the page; */
+var instructors = {};
+/** All the course data on the page; */
+var courses = {};
+
 // resources
 var loadingAnimationURL = chrome.extension.getURL("img/loading.gif");
 var headerTemplates = {};
@@ -23,6 +33,7 @@ var cellTemplates = {};
 
 // load resource files
 (function() {
+  console.time("resources");
   $.when(
     // load all of the cell templates
     $.get(chrome.runtime.getURL('/html/table_cells.html'), function(data) {
@@ -43,22 +54,24 @@ var cellTemplates = {};
       });
     })
   ).then(function() {
-    console.log("DONE GETTING RESOURCES");
-    runScript();
+    console.timeEnd("resources");
+    traverseTable();
   });
 })();
 
-function runScript() {
-  // get the column before the point of injection for the new statistics headers
-  var instructorHeader = $(".dataentrytable > tbody > tr:first-of-type > td:nth-of-type(7)");
+function traverseTable() {
+  // get the column before the point of injection for the new headers
+  var instructorHeader = $(".dataentrytable > tbody > tr:first-of-type > td:nth-of-type(" + (INSTRUCTOR_COL_IDX + 1) + ")");
   if (typeof instructorHeader[0] == 'undefined') return;
 
-  // insert table headers
+  // insert table headers and initialize column arrays
   var prev = instructorHeader;
-  for (var i = 0; i < colsToInclude.length; i++) {
-    prev = $(headerTemplates[colsToInclude[i]]).insertAfter(prev);
-  }
+  config.colsToInclude.forEach(function(val, idx) {
+    prev = $(headerTemplates[val]).insertAfter(prev);
+    dataCols[val] = [];
+  });
 
+  // the row containing the table headers
   var headerRow = $(".dataentrytable > tbody > tr:first-child");
   // extra rows that just get in the way of things (but I still have to put blank cells in them)
   var otherRows = [];
@@ -66,249 +79,249 @@ function runScript() {
   var dataRows = [];
   // regular expression for evaluating course code format
   var courseCodeRegex = new RegExp("[A-Z]{2,4}-[0-9]{4}");
-  // iterates over every row in the table except the first one (the column headers)
-  $(".dataentrytable > tbody > tr:not(:first-child)").each(function(idx) {
-    var hasValidCourseCode = courseCodeRegex.test(this.cells[1].innerText);
-    if (hasValidCourseCode) {
-      dataRows.push(this);
-    } else {
-      otherRows.push(this);
+
+  // gets each row in the table except the first one (the column headers)
+  var rows = $(".dataentrytable > tbody > tr:not(:first-child)");
+  var idx = 0;
+
+  // iterates over the rows asynchronously to avoid blocking the UI
+  var prom = new Promise(function(resolve, reject) {
+    console.time("table traversal");
+    async.whilst(
+      function() { return idx < rows.length; },
+      function(callback) {
+        // set a min for how much time should be burnt during this function call
+        var burnTimeout = new Date();
+        burnTimeout.setTime(burnTimeout.getTime() + 50); // burnTimeout set to 50ms in the future
+
+        do {
+          var curEl = rows[idx];
+
+          // create enough new cells (one for each column to include)
+          var newCells = [];
+          config.colsToInclude.forEach(function() {
+            var newCell = document.createElement("td");
+            newCell.className = "RMPtd dedefault";
+            newCells.push(newCell);
+          });
+          dataCols.rmp.push(newCells[0]);
+          dataCols.anaanu.push(newCells[1]);
+          // dataCols.koofers.push(newCells[2]); // TODO Add Koofers column
+
+          var hasValidCourseCode = courseCodeRegex.test(curEl.cells[COURSE_CODE_COL_IDX].innerText);
+          if (hasValidCourseCode) { // it's a row that data could potentially be grabbed for
+            dataRows.push(curEl);
+
+            // extract info from table
+            var name = curEl.cells[INSTRUCTOR_COL_IDX].innerText;
+            var course = curEl.cells[COURSE_CODE_COL_IDX].innerText;
+            storeInfo(name, course, idx);
+
+            // insert loading cells
+            var colToInsertBefore = curEl.cells[INSTRUCTOR_COL_IDX].nextSibling;
+            for (var cell of newCells) {
+              // add loading bar animations for the cell while information is retrieved
+              var node = document.createElement("img");
+              node.src = loadingAnimationURL;
+              node.className = 'RMPimg';
+              cell.appendChild(node);
+              // insert the cell into the row
+              curEl.insertBefore(cell, colToInsertBefore);
+            }
+          } else { // it's an extra row that just gets in the way of things ("Comments", "Additional Times", etc. rows)
+            otherRows.push(curEl);
+
+            // default column to insert blank cells before
+            var colToInsertBefore = curEl.cells[0];
+
+            // identifies 'Comments' rows by checking the inner text of the second cell
+            if (!!~curEl.cells[0].innerText.search(/comments/i)) { // the row is a 'Comments' row
+              var colToInsertBefore = curEl.cells[1].nextSibling;
+            } else { // the row is an 'Additional Times' row
+              colToInsertBefore = curEl.cells[INSTRUCTOR_COL_IDX].previousSibling.previousSibling;
+            }
+
+            // insert blank cells
+            for (var cell of newCells) {
+              cell.innerText = "";
+              curEl.insertBefore(cell, colToInsertBefore);
+            }
+          }
+          idx++;
+        } while ((new Date()) < burnTimeout && idx < rows.length); // while time hasn't burnt out and it's still passing its test
+
+        // call the next iteration of the function
+        setTimeout(function() { callback(null, idx); }, 0);
+      },
+      function (err, results) {
+        console.timeEnd("table traversal");
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      }
+    );
+  });
+
+  prom.then(fillDataCols);
+}
+
+function storeInfo(name, course, cellIdx) {
+  // store instructor information
+  if (typeof instructors[name] === 'undefined') {
+    var split = name.split(' ');
+    var initials = split[0];
+    split.splice(0, 1); // get rid of initials
+    var lastName = split.join(''); // join any last names together
+    instructors[name] = {
+      "firstName": initials,
+      "lastName": lastName,
+      "initials": initials,
+      "courses": {},
+      "associatedTableCells": [],
+      "rating": "No Rating",
+      "hasRating": false,
+      "rmpURL": "http://www.ratemyprofessors.com/campusRatings.jsp?sid=1349",
+      "koofersURL": "https://www.koofers.com/virginia-tech-vt/",
+      "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
+    };
+  }
+  if (typeof instructors[name].courses[course] === 'undefined') {
+    instructors[name].courses[course] = course;
+  }
+  instructors[name].associatedTableCells.push(cellIdx);
+
+  // store course information
+  if (typeof courses[course] === 'undefined') {
+    var split = course.split('-');
+    courses[course] = {
+      "subject": split[0],
+      "courseNum": split[1],
+      "associatedTableCells": [],
+      "instructors": {},
+      "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
+    }
+  }
+  if (typeof courses[course].instructors[name] === 'undefined') {
+    courses[course].instructors[name] = {
+      "firstName": instructors[name].firstName,
+      "lastName": instructors[name].lastName,
+      "initials": instructors[name].initials,
+      "a": 0.0,
+      "b": 0.0,
+      "c": 0.0,
+      "d": 0.0,
+      "f": 0.0,
+      "hasGPA": false,
+      "avgGPA": "No Data",
+      "associatedTableCells": [],
+      "anaanuURL": courses[course].anaanuURL
+    }
+  }
+  courses[course].instructors[name].associatedTableCells.push(cellIdx);
+}
+
+function fillDataCols() {
+  var chain = Promise.resolve("Start Data Retrieval Chain");
+  // get RMP data
+  chain.then(function() {
+    console.log("Getting RMP Data");
+    return DataService.getRMPRatings(); // DataService is loaded from data-services.js
+  })
+  .then(fillRMPCells) // fill the RMP column with the data that's returned
+  .catch(function(error) {
+    console.log("ERROR Getting RMP Data: ");
+    console.log(error);
+    fillRMPCells(undefined);
+  });
+
+  // get Anaanu data through a series of separate requests
+  Object.keys(courses).forEach(function(crs) {
+    var course = courses[crs];
+    var courseCode = course.subject + "-" + course.courseNum;
+    chain.then(function() {
+      console.log("Getting Anaanu data for " + courseCode);
+      return DataService.getAnaanuDataFor(course.subject + "+" + course.courseNum);
+    })
+    .then(function(results) {
+      fillAnaanuCells(course, results);
+    })
+    .catch(function(error) {
+      console.log("Unable to get Anaanu data for " + courseCode);
+      console.log(error);
+      fillAnaanuCells(course, undefined);
+    });
+  });
+
+  // TODO get Koofers data
+  // chain.then(function() {
+  //   console.log("Getting Koofers Data");
+  //   return DataService.getKoofersData();
+  // })
+  // .catch(function(error) {
+  //   console.log("ERROR Getting Koofers Data: ", error);
+  // })
+  // .then(function(data) {
+  //   console.log(data);
+  // });
+}
+
+function fillRMPCells(results) {
+  Object.keys(instructors).forEach(function(inst, i) { // for every instructor
+    inst = instructors[inst];
+    // update instructor objects with data from results
+    var resultsIdx = -1;
+    if (results && (resultsIdx = results.binarySearch(inst, rmpSearchComparator)) > -1) {
+      var resultRating = results[resultsIdx].averageratingscore_rf;
+      inst.hasRating = (typeof resultRating !== 'undefined');
+      inst.rating = (inst.hasRating) ? resultRating : inst.rating;
+      inst.rmpURL = "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + results[resultsIdx].pk_id;
+      inst.firstName = results[resultsIdx].teacherfirstname_t;
+      inst.lastName = results[resultsIdx].teacherlastname_t;
+    }
+
+    // update each of the cells associated with this professor
+    var injection = "";
+    for (var j = 0; j < inst.associatedTableCells.length; j++) {
+      var curCellNum = inst.associatedTableCells[j];
+      injection = fillProfRatingTemplate(inst);
+      $(dataCols.rmp[curCellNum]).css({opacity: 0});
+      $(dataCols.rmp[curCellNum]).html(injection);
+      $(dataCols.rmp[curCellNum]).animate({opacity: 1}, 1000);
     }
   });
-  // console.log(dataRows);
-  // console.log(otherRows);
-
-
-
-  // get the columns containing course and instructor information
-  var courseCodeCol = $(".dataentrytable > tbody > tr > td:nth-of-type(2)");
-  var instructorCol = $(".dataentrytable > tbody > tr > td:nth-of-type(7)");
-
-  // new columns that will be populated by data from RMP, Koofers, and Anaanu
-  var rmpDataCol = [];
-  var anaanuDataCol = [];
-  // var koofersDataCol = []; // TODO Add Koofers column
-
-  // extract data from courseCodeCol and instructorCol while inserting new cells for RMP, Koofers, and Anaanu
-  for (var i = 1; i < instructorCol.length; i++) { // start at 1 to avoid column headers
-    // create enough new cells for the headers (one for RMP, Anaanu, and potentially Koofers)
-    var newCells = [];
-    for (var j = 0; j < colsToInclude.length; j++) {
-      var newCell = document.createElement("td");
-      newCell.className = "RMPtd dedefault";
-      newCells.push(newCell);
-    }
-    rmpDataCol.push(newCells[0]);
-    anaanuDataCol.push(newCells[1]);
-    // koofersDataCol.push(newCells[2]); // TODO Add Koofers column
-
-    // whether or not the instructor is indicated as "Staff"
-    var staffCourse = instructorCol[i].innerText == "Staff";
-    // whether or not this is a weird row (most of the exceptions come from rows that don't have course codes so I test for those with this regex)
-    var weirdRow = !(new RegExp("[A-Z]{2,4}-[0-9]{4}")).test(courseCodeCol[i].innerText);
-    if (!staffCourse && !weirdRow) { // course with real instructor
-      // insert new cells after the instructor column
-      var row = instructorCol[i].parentNode;
-      var colToInsertBefore = instructorCol[i].nextSibling;
-      for (var cell of newCells) {
-        // add loading bar animations for the cell while information is retrieved
-        var node = document.createElement("img");
-        node.src = loadingAnimationURL;
-        node.className = 'RMPimg';
-        cell.appendChild(node);
-        // insert the cell into the row
-        row.insertBefore(cell, colToInsertBefore);
-      }
-
-      // data extraction begins here
-      var name = instructorCol[i].innerText;
-      var course = courseCodeCol[i].innerText;
-
-      // store instructor information
-      if (typeof instructors[name] === 'undefined') {
-        var split = name.split(' ');
-        var initials = split[0];
-        split.splice(0, 1); // get rid of initials
-        var lastName = split.join(''); // join any last names together
-        instructors[name] = {
-          "firstName": initials,
-          "lastName": lastName,
-          "initials": initials,
-          "courses": {},
-          "associatedTableCells": [],
-          "rating": "No Rating",
-          "hasRating": false,
-          "rmpURL": "http://www.ratemyprofessors.com/campusRatings.jsp?sid=1349",
-          "koofersURL": "https://www.koofers.com/virginia-tech-vt/",
-          "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
-        };
-      }
-      if (typeof instructors[name].courses[course] === 'undefined') {
-        instructors[name].courses[course] = course;
-      }
-      instructors[name].associatedTableCells.push(i - 1);
-
-      // store course information
-      if (typeof courses[course] === 'undefined') {
-        var split = course.split('-');
-        courses[course] = {
-          "subject": split[0],
-          "courseNum": split[1],
-          "associatedTableCells": [],
-          "instructors": {},
-          "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
-        }
-      }
-      if (typeof courses[course].instructors[name] === 'undefined') {
-        courses[course].instructors[name] = {
-          "firstName": instructors[name].firstName,
-          "lastName": instructors[name].lastName,
-          "initials": instructors[name].initials,
-          "a": 0.0,
-          "b": 0.0,
-          "c": 0.0,
-          "d": 0.0,
-          "f": 0.0,
-          "hasGPA": false,
-          "avgGPA": "No Data",
-          "associatedTableCells": [],
-          "anaanuURL": courses[course].anaanuURL
-        }
-      }
-      courses[course].instructors[name].associatedTableCells.push(i - 1);
-
-    } else if (weirdRow) {
-      // insert new cells in line with columns despite being a weird row
-      var row = instructorCol[i].parentNode;
-      var colToInsertBefore = instructorCol[i].previousSibling.previousSibling;
-      for (var cell of newCells) {
-        cell.innerText = "";
-        row.insertBefore(cell, colToInsertBefore);
-      }
-
-    } else { // extra weird row
-      // insert new cells after the instructor column
-      var row = instructorCol[i].parentNode;
-      var colToInsertBefore = instructorCol[i].nextSibling;
-      for (var cell of newCells) {
-        cell.innerText = "N / A";
-        row.insertBefore(cell, colToInsertBefore);
-      }
-
-    }
-
-  }
-
-
-  getData();
-
-  function getData() {
-    console.log("Getting RMP Data");
-    // DataService is loaded from data-services.js
-    DataService.getRMPRatings().then(function(results) {
-      for (var inst in instructors) {
-        // update instructor objects with data from results
-        var resultsIdx = -1;
-
-        if ((resultsIdx = results.binarySearch(instructors[inst], rmpSearchComparator)) > -1) {
-          var resultRating = results[resultsIdx].averageratingscore_rf;
-          instructors[inst].hasRating = (typeof resultRating !== 'undefined');
-          instructors[inst].rating = (instructors[inst].hasRating) ? resultRating : instructors[inst].rating;
-          instructors[inst].rmpURL = "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + results[resultsIdx].pk_id;
-          instructors[inst].firstName = results[resultsIdx].teacherfirstname_t;
-          instructors[inst].lastName = results[resultsIdx].teacherlastname_t;
-        }
-
-        // update each of the cells associated with this professor
-        var injection = "";
-        for (var j = 0; j < instructors[inst].associatedTableCells.length; j++) {
-          var curCellNum = instructors[inst].associatedTableCells[j];
-          injection = fillProfRatingTemplate(instructors[inst]);
-          $(rmpDataCol[curCellNum]).css({opacity: 0});
-          $(rmpDataCol[curCellNum]).html(injection);
-          $(rmpDataCol[curCellNum]).animate({opacity: 1}, 1000);
-        }
-      }
-      // console.log(instructors);
-    })
-    .catch(function(error) {
-      console.log("ERROR Getting RMP Data: ");
-      console.log(error);
-    })
-
-    // get Anaanu data
-    .then(function() {
-      console.log("Getting Anaanu Data");
-      for (var crs in courses) { // for each course
-        (function (course) {
-          console.log("Collecting Anaanu data for " + course.subject + "-" + course.courseNum);
-          DataService.getAnaanuDataFor(course.subject + "+" + course.courseNum).then(function(results) {
-            console.log("Collected Anaanu data for " + course.subject + "-" + course.courseNum + " successfully!!");
-            for (var inst in course.instructors) { // for each instructor of that course
-              inst = course.instructors[inst];
-              // update course objects with data from results
-              inst.anaanuURL = inst.anaanuURL + "course/" + course.subject + "+" + course.courseNum + "/";
-              var resultsIdx = -1;
-              if ((resultsIdx = results.binarySearch(inst, anaanuSearchComparator)) > -1) {
-                inst.a = results[resultsIdx].a;
-                inst.b = results[resultsIdx].b;
-                inst.c = results[resultsIdx].c;
-                inst.d = results[resultsIdx].d;
-                inst.f = results[resultsIdx].f;
-                inst.hasGPA = true;
-                inst.avgGPA = results[resultsIdx].gpa;
-                inst.anaanuURL = inst.anaanuURL + encodeURIComponent(results[resultsIdx].instructor);
-              }
-
-              // update each of the cells associated with this course and instructor
-              var injection = "";
-              for (var j = 0; j < inst.associatedTableCells.length; j++) {
-                var curCellNum = inst.associatedTableCells[j];
-                injection = fillCourseGPATemplate(inst);
-                $(anaanuDataCol[curCellNum]).css({opacity: 0});
-                $(anaanuDataCol[curCellNum]).html(injection);
-                $(anaanuDataCol[curCellNum]).animate({opacity: 1}, 1000);
-              }
-            }
-          }, function(error) {
-            console.log("Unable to collect Anaanu data for course " + course.subject + "-" + course.courseNum);
-            for (var inst in course.instructors) { // for each instructor of that course
-              inst = course.instructors[inst];
-              // update each of the cells associated with this course and instructor
-              var injection = "";
-              for (var j = 0; j < inst.associatedTableCells.length; j++) {
-                var curCellNum = inst.associatedTableCells[j];
-                injection = fillCourseGPATemplate(inst);
-                $(anaanuDataCol[curCellNum]).css({opacity: 0});
-                $(anaanuDataCol[curCellNum]).html(injection);
-                $(anaanuDataCol[curCellNum]).animate({opacity: 1}, 1000);
-              }
-            }
-          })
-        })(courses[crs]);
-      }
-    })
-    .catch(function(error) {
-      console.log("ERROR Getting Anaanu Data: ");
-      console.log(error);
-    })
-
-    // TODO get Koofers data
-    // .then(function() {
-    //   console.log("Getting Koofers Data");
-    //   return DataService.getKoofersData();
-    // })
-    // .then(function(data) {
-    //   console.log(data);
-    // }, function(error) {
-    //   console.log("ERROR Getting Koofers Data: ");
-    //   console.log(error);
-    // });
-
-  }
 
 }
 
+function fillAnaanuCells(course, results) {
+  Object.keys(course.instructors).forEach(function(inst, i) { // for every instructor of that course
+    inst = course.instructors[inst];
+    // update course objects with data from results
+    var resultsIdx = -1;
+    if (results && (resultsIdx = results.binarySearch(inst, anaanuSearchComparator)) > -1) {
+      inst.a = results[resultsIdx].a;
+      inst.b = results[resultsIdx].b;
+      inst.c = results[resultsIdx].c;
+      inst.d = results[resultsIdx].d;
+      inst.f = results[resultsIdx].f;
+      inst.hasGPA = true;
+      inst.avgGPA = results[resultsIdx].gpa;
+      inst.anaanuURL = inst.anaanuURL + "course/" + course.subject + "+" +
+        course.courseNum + "/" + encodeURIComponent(results[resultsIdx].instructor);
+    }
+
+    // update each of the cells associated with this course and instructor
+    var injection = "";
+    for (var j = 0; j < inst.associatedTableCells.length; j++) {
+      var curCellNum = inst.associatedTableCells[j];
+      injection = fillCourseGPATemplate(inst);
+      $(dataCols.anaanu[curCellNum]).css({opacity: 0});
+      $(dataCols.anaanu[curCellNum]).html(injection);
+      $(dataCols.anaanu[curCellNum]).animate({opacity: 1}, 1000);
+    }
+  });
+}
 
 function fillProfRatingTemplate(profData) {
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
@@ -385,4 +398,26 @@ function anaanuSearchComparator(valToFind, arrVal) {
     return 1;
   }
   return -1;
+}
+
+
+function asyncHelper(array, performFunc, checkFunc) {
+  return new Promise(function(resolve, reject) {
+    loop();
+    function loop() {
+      if (checkFunc()) {
+        setTimeout(loop, 0);
+      } else {
+        resolve();
+        return;
+      }
+
+      var burnTimeout = new Date();
+      burnTimeout.setTime(burnTimeout.getTime() + 50); // burnTimeout set to 50ms in the future
+
+      do {
+        performFunc(array);
+      } while ((new Date()) < burnTimeout && checkFunc());
+    }
+  });
 }
