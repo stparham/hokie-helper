@@ -21,6 +21,8 @@ var config = {
 // new columns that will be populated by data from RMP, Koofers, and Anaanu
 var dataCols = {};
 
+/** The subject that is selected at the top of the page; */
+var selectedSubject;
 /** All the instructor data on the page; */
 var instructors = {};
 /** All the course data on the page; */
@@ -55,9 +57,15 @@ var cellTemplates = {};
     })
   ).then(function() {
     console.timeEnd("resources");
+    getSelectedSubject();
     traverseTable();
   });
 })();
+
+function getSelectedSubject() {
+  selectedSubject = $("select[name='subj_code']")[0].value;
+  console.log(selectedSubject);
+}
 
 function traverseTable() {
   // get the column before the point of injection for the new headers
