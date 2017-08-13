@@ -2,10 +2,11 @@ function DataService() {
   this.name = "DataService";
 }
 
+// gets all the RMP ratings for the professors at Virginia Tech
 DataService.getRMPRatings = function() {
   return new Promise(function(resolve, reject) {
     chrome.runtime.sendMessage({
-      "type": "RMPData"
+      "type": "RMPRatings"
     }, function(response) {
       try {
         // resolve the Promise with the sorted results from RMP
@@ -23,22 +24,21 @@ DataService.getRMPRatings = function() {
           return -1;
         }));
       } catch (error) {
-        // reject the Promise with the error
-        reject(error);
+        reject("Error while getting Rate My Professor ratings");
       }
     });
   });
 };
 
+// gets all the Anaanu data for professors within a certain course
 DataService.getAnaanuDataFor = function(course) {
   return new Promise(function(resolve, reject) {
-    // TODO implement an array of Promises here that will update the columns and make new requests as data comes back
     chrome.runtime.sendMessage({
       "type": "AnaanuData",
       "course": course
     }, function(response) {
-      if (typeof response.error !== 'undefined') {
-        reject(response.message);
+      if (response instanceof Error) {
+        reject("Unable to get Anaanu data");
       } else {
         resolve(response);
       }
@@ -46,17 +46,36 @@ DataService.getAnaanuDataFor = function(course) {
   });
 };
 
-// TODO get Koofers data
-// DataService.getKoofersData = function() {
-//   return new Promise(function(resolve, reject) {
-//     chrome.runtime.sendMessage({
-//       "type": "KoofersData"
-//     }, function(response) {
-//       try {
-//         resolve(response);
-//       } catch (error) {
-//         reject(error);
-//       }
-//     });
-//   });
-// };
+// gets all the Koofers ratings for professors within a certain subject
+DataService.getKoofersRatingsFor = function(subject) {
+  return new Promise(function(resolve, reject) {
+    chrome.runtime.sendMessage({
+      "type": "KoofersRatings",
+      "subject": subject
+    }, function(response) {
+      if (response instanceof Error) {
+        reject("Unable to get Koofers ratings");
+      } else {
+        resolve(response);
+      }
+    })
+  })
+};
+
+// gets all the Koofers average GPAs for professors within a certain course
+DataService.getKoofersGPAFor = function(courseSubj, courseNum, courseTitle) {
+  return new Promise(function(resolve, reject) {
+    chrome.runtime.sendMessage({
+      "type": "KoofersGPA",
+      "courseSubj": courseSubj,
+      "courseNum": courseNum,
+      "courseTitle": courseTitle
+    }, function(response) {
+      if (response instanceof Error) {
+        reject("Unable to get Koofers GPA");
+      } else {
+        resolve(response);
+      }
+    })
+  })
+};

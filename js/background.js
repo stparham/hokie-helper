@@ -1,7 +1,43 @@
 const NUM_PROFS_AT_VT = 1500;
 
-chrome.runtime.onMessage.addListener(function(request, sender, callback) {
-  if (request.type === "RMPData") {
+chrome.runtime.onMessage.addListener(function(req, sender, sendResponse) {
+  switch (req.type) {
+    case "RMPRatings":
+      getRMPRatings().then(function(results) {
+        sendResponse(results);
+      }, function(error) {
+        sendResponse(new Error("Error while getting Rate My Professor ratings"));
+      });
+      break;
+    case "AnaanuData":
+      getAnaanuDataFor(req.course).then(function(results) {
+        sendResponse(results);
+      }, function(error) {
+        sendResponse(new Error("Error while getting Anaanu data"));
+      });
+      break;
+    case "KoofersRatings":
+      getKoofersRatingsFor(req.subject).then(function(results) {
+        sendResponse(results);
+      }, function(error) {
+        sendResponse(new Error("Error while getting Koofers ratings"));
+      });
+      break;
+    case "KoofersGPA":
+      getKoofersGPAFor(req.courseSubj, req.courseNum, req.courseTitle).then(function(results) {
+        sendResponse(results);
+      }, function(error) {
+        sendResponse(new Error("Error while getting Koofers GPAs"));
+      });
+      break;
+    default:
+      sendResponse(new Error("Invalid request type"));
+  }
+  return true; // prevents the callback from being called too early on return
+});
+
+function getRMPRatings() {
+  return new Promise(function(resolve, reject) {
     var host1 = "https://search-a.akamaihd.net/typeahead/suggest/";
     var host2 = "http://search.mtvnservices.com/typeahead/suggest/";
     var params1 = "?solrformat=true" +
@@ -46,159 +82,176 @@ chrome.runtime.onMessage.addListener(function(request, sender, callback) {
             resp = $('.breakdown-header', el);
           }
         }
-        console.log(resp.response);
-        callback(resp.response);
+        resolve(resp.response);
       } else if (xhr.readyState == 4 && xhr.status != 200) {
-        console.log("ERROR: " + xhr.responseText);
+        reject("ERROR: " + xhr.responseText);
       }
     }
     xhr.send();
-    return true; // prevents the callback from being called too early on return
-  } else if (request.type === "AnaanuData") {
-    var url = "http://anaanu.com/virginia-tech-vt/course/" + request.course + "/";
+  });
+}
+
+function getAnaanuDataFor(course) {
+  return new Promise(function(resolve, reject) {
+    var url = "http://anaanu.com/virginia-tech-vt/course/" + course + "/";
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState == 4 && xhr.status == 200) {
         var el = $('<div></div>');
         el.html(xhr.responseText);
-        var inlineScripts = $('script', el)
+        var inlineScripts = el.find('script')
             .filter(function() {
               return this.src == "";
             });
         var script = inlineScripts[inlineScripts.length - 1].innerText;
         var JSONStrIndicator = "= \"{";
         var JSONStr = script.slice(script.search(JSONStrIndicator) + 3, script.search("\";")).replace(/\\"/g, '"');
-        console.log(JSONStr);
         try {
           var obj = JSON.parse(JSONStr);
-          console.log(obj);
           var afterAnaanuCraziness = doAnaanuCraziness(obj);
-          console.log(afterAnaanuCraziness);
-          callback(afterAnaanuCraziness);
+          resolve(afterAnaanuCraziness);
         } catch (error) { // catches JSON parsing errors
-          callback({"message": "Error getting Anaanu data", "error": error});
+          reject("Error while parsing");
         }
       } else if (xhr.readyState == 4 && xhr.status != 200) {
-        console.log("ERROR: " + xhr.responseText);
+        reject("ERROR: " + xhr.responseText);
       }
     }
     xhr.send();
-    return true; // prevents the callback from being called too early on return
-  } else if (request.type === "KoofersData") {
-    callback("Here's the Koofers data.");
-  } else {
-    callback("ERROR: Invalid Request Type");
-  }
-});
+  });
 
-function doAnaanuCraziness(courseResultsObject) {
-  var l = [];
+  // I found this code in the source code for Anaanu and figured out that it parses the data that's sent along with the page.
+  // It was minified, so it's hard to follow.  I plan on eventually going through it and making it more readable.
+  function doAnaanuCraziness(courseResultsObject) {
+    var l = [];
 
-  return t(courseResultsObject);
+    return t(courseResultsObject);
 
-  function t(r) {
-      var e = r;
-      for (var t in e)
-          if ("course_grade" !== t)
-              for (var o = e[t].classes, s = 0; s < o.length; s++)
-                  o[s].semester = t,
-                  l.push(o[s]);
-      return a(l);
-  }
-
-  function a(r) {
-      var e = r
-        , t = ""
-        , a = ""
-        , s = 0
-        , template = {
-          instructor: "Instructor",
-          num_courses: "Courses Taught",
-          withdraws: "Withdraws",
-          a: "A %",
-          b: "B %",
-          c: "C %",
-          d: "D %",
-          f: "F %",
-          gpa: "GPA"
-      }
-        , c = {
-          credit_hours: "credit_hours",
-          gpa: "gpa",
-          a: "a",
-          b: "b",
-          c: "c",
-          d: "d",
-          f: "f",
-          withdraws: "withdraws"
-      }
-        , i = {}
-        , l = [];
-      for (s = 0; s < e.length; s++)
-          t = e[s].instructor,
-          t in i || (i[t] = {},
-          i[t].courses = [],
-          i[t].cour_avg = {}),
-          i[t].courses.push(e[s]);
-      for (t in i) {
-          var g = i[t].courses
-            , h = g.length;
-          for (s = 0; s < h; s++)
-              for (a in c) {
-                  var v = g[s][a];
-                  a in i[t].cour_avg || (i[t].cour_avg[a] = 0),
-                  i[t].cour_avg[a] += parseFloat(v)
-              }
-          for (a in c)
-              i[t].cour_avg[a] /= h;
-          i[t].cour_avg.num_courses = h,
-          i[t].cour_avg.course = g[0].course,
-          i[t].cour_avg.instructor = g[0].instructor,
-          i[t].cour_avg.subject = g[0].subject,
-          i[t].cour_avg.title = g[0].title,
-          l.push(n(i[t].cour_avg))
-      }
-      l.sort(d);
-      return l;
-  }
-
-  function d(r, e) {
-      var t = r.instructor
-        , a = e.instructor;
-      return t < a ? -1 : t > a ? 1 : 0
-  }
-
-  function n(r) {
-      var e = {
-          credit_hours: "credit_hours",
-          gpa: "gpa",
-          a: "a",
-          b: "b",
-          c: "c",
-          d: "d",
-          f: "f",
-          withdraws: "withdraws"
-      };
-      for (var t in e)
-          "credit_hours" === e[t] || "withdraws" === e[t] ? r[t] = Math.floor(r[t]) : "gpa" === e[t] ? r[t] = (Math.round(100 * r[t]) / 100).toFixed(2) : r[t] = Math.round(10 * r[t]) / 10;
-      return r
-  }
-}
-
-
-
-
-// Notifications for the extension - appear on screen
-function sendNotification(text) {
-    Notification.requestPermission();
-    var options = {
-        body: text,
-        icon: chrome.extension.getURL("images/logo128.png")
+    function t(r) {
+        var e = r;
+        for (var t in e)
+            if ("course_grade" !== t)
+                for (var o = e[t].classes, s = 0; s < o.length; s++)
+                    o[s].semester = t,
+                    l.push(o[s]);
+        return a(l);
     }
-    var n = new Notification("ASU Professor Ratings", options);
-    setTimeout(function(){n.close();}, 7000);
+
+    function a(r) {
+        var e = r
+          , t = ""
+          , a = ""
+          , s = 0
+          , template = {
+            instructor: "Instructor",
+            num_courses: "Courses Taught",
+            withdraws: "Withdraws",
+            a: "A %",
+            b: "B %",
+            c: "C %",
+            d: "D %",
+            f: "F %",
+            gpa: "GPA"
+        }
+          , c = {
+            credit_hours: "credit_hours",
+            gpa: "gpa",
+            a: "a",
+            b: "b",
+            c: "c",
+            d: "d",
+            f: "f",
+            withdraws: "withdraws"
+        }
+          , i = {}
+          , l = [];
+        for (s = 0; s < e.length; s++)
+            t = e[s].instructor,
+            t in i || (i[t] = {},
+            i[t].courses = [],
+            i[t].cour_avg = {}),
+            i[t].courses.push(e[s]);
+        for (t in i) {
+            var g = i[t].courses
+              , h = g.length;
+            for (s = 0; s < h; s++)
+                for (a in c) {
+                    var v = g[s][a];
+                    a in i[t].cour_avg || (i[t].cour_avg[a] = 0),
+                    i[t].cour_avg[a] += parseFloat(v)
+                }
+            for (a in c)
+                i[t].cour_avg[a] /= h;
+            i[t].cour_avg.num_courses = h,
+            i[t].cour_avg.course = g[0].course,
+            i[t].cour_avg.instructor = g[0].instructor,
+            i[t].cour_avg.subject = g[0].subject,
+            i[t].cour_avg.title = g[0].title,
+            l.push(n(i[t].cour_avg))
+        }
+        l.sort(d);
+        return l;
+    }
+
+    function d(r, e) {
+        var t = r.instructor
+          , a = e.instructor;
+        return t < a ? -1 : t > a ? 1 : 0
+    }
+
+    function n(r) {
+        var e = {
+            credit_hours: "credit_hours",
+            gpa: "gpa",
+            a: "a",
+            b: "b",
+            c: "c",
+            d: "d",
+            f: "f",
+            withdraws: "withdraws"
+        };
+        for (var t in e)
+            "credit_hours" === e[t] || "withdraws" === e[t] ? r[t] = Math.floor(r[t]) : "gpa" === e[t] ? r[t] = (Math.round(100 * r[t]) / 100).toFixed(2) : r[t] = Math.round(10 * r[t]) / 10;
+        return r
+    }
+  }
 }
+
+function getKoofersRatingsFor(subject) {
+  return new Promise(function(resolve, reject) {
+    var url = "https://www.koofers.com/virginia-tech-vt/" + subject + "professors";
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4 && xhr.status == 200) {
+        var results = [];
+
+        var el = $('<div></div>');
+        el.html(xhr.responseText);
+        var professorRows = el.find('div.list_view_widget.professors > div.row');
+
+        resolve(results);
+      } else if (xhr.readyState == 4 && xhr.status != 200) {
+        reject("ERROR: " + xhr.responseText);
+      }
+    }
+    xhr.send();
+  });
+}
+
+function getKoofersGPAFor(courseSubj, courseNum, courseTitle) {
+
+}
+
+
+
+
+
+
+
+
+
 
 
 

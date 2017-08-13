@@ -239,8 +239,7 @@ function fillDataCols() {
   })
   .then(fillRMPCells) // fill the RMP column with the data that's returned
   .catch(function(error) {
-    console.log("ERROR Getting RMP Data: ");
-    console.log(error);
+    console.log("Error while getting RMP ratings");
     fillRMPCells(undefined);
   });
 
@@ -257,22 +256,9 @@ function fillDataCols() {
     })
     .catch(function(error) {
       console.log("Unable to get Anaanu data for " + courseCode);
-      console.log(error);
       fillAnaanuCells(course, undefined);
     });
   });
-
-  // TODO get Koofers data
-  // chain.then(function() {
-  //   console.log("Getting Koofers Data");
-  //   return DataService.getKoofersData();
-  // })
-  // .catch(function(error) {
-  //   console.log("ERROR Getting Koofers Data: ", error);
-  // })
-  // .then(function(data) {
-  //   console.log(data);
-  // });
 }
 
 function fillRMPCells(results) {
