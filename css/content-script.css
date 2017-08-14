@@ -33,6 +33,15 @@
     right: 120%;
 }
 
+.tooltip-bottom {
+    top: -2px;
+    top: 120%;
+}
+
+.tooltip-top {
+    bottom: 120%;
+}
+
 .tooltip:hover .tooltiptext {
     visibility: visible;
     opacity: 1;
