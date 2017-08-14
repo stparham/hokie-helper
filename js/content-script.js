@@ -15,7 +15,7 @@ const INSTRUCTOR_COL_IDX = 6;
 
 /** The data columns to include in the current page; */
 var config = {
-  "colsToInclude": ["rmp", "anaanu"]
+  "colsToInclude": ["rmp", "koofersRatings", "anaanu"]
 };
 
 // new columns that will be populated by data from RMP, Koofers, and Anaanu
@@ -107,14 +107,12 @@ function traverseTable() {
 
           // create enough new cells (one for each column to include)
           var newCells = [];
-          config.colsToInclude.forEach(function() {
+          config.colsToInclude.forEach(function(val, idx) {
             var newCell = document.createElement("td");
             newCell.className = "RMPtd dedefault";
             newCells.push(newCell);
+            dataCols[val].push(newCell);
           });
-          dataCols.rmp.push(newCells[0]);
-          dataCols.anaanu.push(newCells[1]);
-          // dataCols.koofers.push(newCells[2]); // TODO Add Koofers column
 
           var hasValidCourseCode = courseCodeRegex.test(curEl.cells[COURSE_CODE_COL_IDX].innerText);
           if (hasValidCourseCode) { // it's a row that data could potentially be grabbed for
@@ -188,11 +186,19 @@ function storeInfo(name, course, cellIdx) {
       "initials": initials,
       "courses": {},
       "associatedTableCells": [],
-      "rating": "No Rating",
-      "hasRating": false,
-      "rmpURL": "http://www.ratemyprofessors.com/campusRatings.jsp?sid=1349",
-      "koofersURL": "https://www.koofers.com/virginia-tech-vt/",
-      "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
+      "rmp": {
+        "rating": "No Rating",
+        "hasRating": false,
+        "url": "http://www.ratemyprofessors.com/campusRatings.jsp?sid=1349"
+      },
+      "koofersRatings": {
+        "rating": "No Rating",
+        "hasRating": false,
+        "url": "https://www.koofers.com/virginia-tech-vt/"
+      },
+      "anaanu": {
+        "url": "http://anaanu.com/virginia-tech-vt/"
+      }
     };
   }
   if (typeof instructors[name].courses[course] === 'undefined') {
@@ -232,9 +238,10 @@ function storeInfo(name, course, cellIdx) {
 
 function fillDataCols() {
   var chain = Promise.resolve("Start Data Retrieval Chain");
-  // get RMP data
+
+  // get RMP ratings
   chain.then(function() {
-    console.log("Getting RMP Data");
+    console.log("Getting RMP ratings");
     return DataService.getRMPRatings(); // DataService is loaded from data-services.js
   })
   .then(fillRMPCells) // fill the RMP column with the data that's returned
@@ -242,6 +249,20 @@ function fillDataCols() {
     console.log("Error while getting RMP ratings");
     fillRMPCells(undefined);
   });
+
+  // get Koofers ratings
+  chain.then(function() {
+    console.log("Getting Koofers ratings");
+    return DataService.getKoofersRatingsFor(selectedSubject);
+  })
+  .then(fillKoofersRatingsCells) // fill the Koofers ratings column with the data that's returned
+  .catch(function(error) {
+    console.log("Error while getting Koofers ratings")
+    fillKoofersRatingsCells(undefined);
+  });
+
+  // get Koofers GPA
+
 
   // get Anaanu data through a series of separate requests
   Object.keys(courses).forEach(function(crs) {
@@ -268,9 +289,9 @@ function fillRMPCells(results) {
     var resultsIdx = -1;
     if (results && (resultsIdx = results.binarySearch(inst, rmpSearchComparator)) > -1) {
       var resultRating = results[resultsIdx].averageratingscore_rf;
-      inst.hasRating = (typeof resultRating !== 'undefined');
-      inst.rating = (inst.hasRating) ? resultRating : inst.rating;
-      inst.rmpURL = "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + results[resultsIdx].pk_id;
+      inst.rmp.hasRating = (typeof resultRating !== 'undefined');
+      inst.rmp.rating = (inst.rmp.hasRating) ? resultRating : inst.rmp.rating;
+      inst.rmp.url = "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + results[resultsIdx].pk_id;
       inst.firstName = results[resultsIdx].teacherfirstname_t;
       inst.lastName = results[resultsIdx].teacherlastname_t;
     }
@@ -279,13 +300,38 @@ function fillRMPCells(results) {
     var injection = "";
     for (var j = 0; j < inst.associatedTableCells.length; j++) {
       var curCellNum = inst.associatedTableCells[j];
-      injection = fillProfRatingTemplate(inst);
+      injection = fillRMPRatingTemplate(inst.rmp);
       $(dataCols.rmp[curCellNum]).css({opacity: 0});
       $(dataCols.rmp[curCellNum]).html(injection);
       $(dataCols.rmp[curCellNum]).animate({opacity: 1}, 1000);
     }
   });
+}
 
+function fillKoofersRatingsCells(results) {
+  Object.keys(instructors).forEach(function(inst, i) { // for every instructor
+    inst = instructors[inst];
+    // update instructor objects with data from results
+    var resultsIdx = -1;
+    if (results && (resultsIdx = results.binarySearch(inst, koofersRatingsSearchComparator)) > -1) {
+      var resultRating = results[resultsIdx].rating;
+      inst.koofersRatings.hasRating = (resultRating !== undefined);
+      inst.koofersRatings.rating = (inst.koofersRatings.hasRating) ? Math.round(resultRating * 100) / 100 : inst.koofersRatings.rating;
+      inst.koofersRatings.url = results[resultsIdx].url;
+      inst.firstName = results[resultsIdx].firstName;
+      inst.lastName = results[resultsIdx].lastName;
+    }
+
+    // update each of the cells associated with this professor
+    var injection = "";
+    for (var j = 0; j < inst.associatedTableCells.length; j++) {
+      var curCellNum = inst.associatedTableCells[j];
+      injection = fillKoofersRatingTemplate(inst.koofersRatings);
+      $(dataCols.koofersRatings[curCellNum]).css({opacity: 0});
+      $(dataCols.koofersRatings[curCellNum]).html(injection);
+      $(dataCols.koofersRatings[curCellNum]).animate({opacity: 1}, 1000);
+    }
+  });
 }
 
 function fillAnaanuCells(course, results) {
@@ -309,7 +355,7 @@ function fillAnaanuCells(course, results) {
     var injection = "";
     for (var j = 0; j < inst.associatedTableCells.length; j++) {
       var curCellNum = inst.associatedTableCells[j];
-      injection = fillCourseGPATemplate(inst);
+      injection = fillAnaanuGPATemplate(inst);
       $(dataCols.anaanu[curCellNum]).css({opacity: 0});
       $(dataCols.anaanu[curCellNum]).html(injection);
       $(dataCols.anaanu[curCellNum]).animate({opacity: 1}, 1000);
@@ -317,10 +363,10 @@ function fillAnaanuCells(course, results) {
   });
 }
 
-function fillProfRatingTemplate(profData) {
+function fillRMPRatingTemplate(profData) {
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
   var cell = $(cellTemplates["rmp"]).clone();
-  cell.find(".RMPa").attr('href', profData.rmpURL);
+  cell.find(".RMPa").attr('href', profData.url);
   cell.find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
   cell.find(".RMPatext").html(profData.rating);
   cell.find(".tooltiptext").html(profData.rating + " / 5 Rating");
@@ -328,7 +374,18 @@ function fillProfRatingTemplate(profData) {
   return cell.prop('outerHTML');
 }
 
-function fillCourseGPATemplate(courseData) {
+function fillKoofersRatingTemplate(profData) {
+  var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
+  var cell = $(cellTemplates["koofersRatings"]).clone();
+  cell.find(".RMPa").attr('href', profData.url);
+  cell.find(".RMPatext").attr('style', 'background-color: #' + ratingColor);
+  cell.find(".RMPatext").html(profData.rating);
+  cell.find(".tooltiptext").html(profData.rating + " / 5 Rating");
+
+  return cell.prop('outerHTML');
+}
+
+function fillAnaanuGPATemplate(courseData) {
   var ratingColor = (courseData.hasGPA) ? getGPAColor(courseData.avgGPA) : 'CCC';
   var cell = $(cellTemplates["anaanu"]).clone();
   cell.find(".RMPa").attr('href', courseData.anaanuURL);
@@ -366,6 +423,25 @@ function getGPAColor(gpa) {
 function rmpSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.teacherlastname_t.toLowerCase();
   var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
+  var valToFindLastName = valToFind.lastName.toLowerCase();
+  if (valToFindLastName == arrValLastName) {
+    if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
+      return 0;
+    } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
+      return 1;
+    }
+    return -1;
+  }
+  if (valToFindLastName > arrValLastName) {
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
+function koofersRatingsSearchComparator(valToFind, arrVal) {
+  var arrValLastName = arrVal.lastName.toLowerCase();
+  var arrValFirstName = arrVal.firstName.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
   if (valToFindLastName == arrValLastName) {
     if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {

@@ -86,7 +86,7 @@ function getRMPRatings() {
       } else if (xhr.readyState == 4 && xhr.status != 200) {
         reject("ERROR: " + xhr.responseText);
       }
-    }
+    };
     xhr.send();
   });
 }
@@ -117,7 +117,7 @@ function getAnaanuDataFor(course) {
       } else if (xhr.readyState == 4 && xhr.status != 200) {
         reject("ERROR: " + xhr.responseText);
       }
-    }
+    };
     xhr.send();
   });
 
@@ -219,24 +219,56 @@ function getAnaanuDataFor(course) {
 }
 
 function getKoofersRatingsFor(subject) {
-  return new Promise(function(resolve, reject) {
-    var url = "https://www.koofers.com/virginia-tech-vt/" + subject + "professors";
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", url, true);
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == 4 && xhr.status == 200) {
-        var results = [];
+  return new Promise(function(resolveOuter, rejectOuter) {
+    var initStatus = {"nextPage": "https://www.koofers.com/virginia-tech-vt/" + subject + "/professors?p=1", "results": []};
 
-        var el = $('<div></div>');
-        el.html(xhr.responseText);
-        var professorRows = el.find('div.list_view_widget.professors > div.row');
+    var chain = requestPage(initStatus);
 
-        resolve(results);
-      } else if (xhr.readyState == 4 && xhr.status != 200) {
-        reject("ERROR: " + xhr.responseText);
-      }
+    function requestPage(status) {
+      return new Promise(function(resolve, reject) {
+        var url = status.nextPage;
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState == 4 && xhr.status == 200) {
+            var el = $('<div></div>');
+            el.html(xhr.responseText);
+
+            var professorRows = el.find('div.list_view_widget.professors > div.row');
+            professorRows.each(function(idx) {
+              var profData = {};
+              var ratingSpan = $(this).find('div.right > div.rating > span');
+              if (ratingSpan.length === 1) {
+                profData.rating = ratingSpan[0].innerText;
+              }
+              var nameLink = $(this).find('div.content > div.title > a');
+              if (nameLink.length === 1) {
+                profData.url = "https://www.koofers.com" + nameLink[0].pathname;
+                var nameSplit = nameLink[0].innerText.split(", ");
+                profData.lastName = (nameSplit[0]) ? nameSplit[0] : "";
+                profData.firstName = (nameSplit[1]) ? nameSplit[1] : "";
+                status.results.push(profData);
+              }
+            });
+
+            var nextPageLink = el.find('div.paging_widget > div.page_links > a.next');
+            if (nextPageLink.length > 0) { // if there is a next page
+              status.nextPage = "https://www.koofers.com/virginia-tech-vt/" + subject + "/professors" + nextPageLink[0].search; // get the link
+              chain.then(function() { // and chain the next page's results to the Promise chain
+                return requestPage(status);
+              });
+            } else { // else there are no more pages so we can resolve the overall promise
+              resolveOuter(status.results);
+            }
+
+            resolve(status);
+          } else if (xhr.readyState == 4 && xhr.status != 200) {
+            reject("ERROR: " + xhr.responseText);
+          }
+        };
+        xhr.send();
+      });
     }
-    xhr.send();
   });
 }
 
