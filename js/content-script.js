@@ -179,7 +179,7 @@ function storeInfo(name, course, cellIdx) {
     var split = name.split(' ');
     var initials = split[0];
     split.splice(0, 1); // get rid of initials
-    var lastName = split.join(''); // join any last names together
+    var lastName = split.join(' '); // join any last names together
     instructors[name] = {
       "firstName": initials,
       "lastName": lastName,
@@ -425,9 +425,9 @@ function rmpSearchComparator(valToFind, arrVal) {
   var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
   if (valToFindLastName == arrValLastName) {
-    if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
+    if ( valToFind.initials.toLowerCase().charAt(0) == arrValFirstName.charAt(0)) {
       return 0;
-    } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
+    } else if (valToFind.initials.toLowerCase().charAt(0) > arrValFirstName.charAt(0)) {
       return 1;
     }
     return -1;
@@ -444,9 +444,9 @@ function koofersRatingsSearchComparator(valToFind, arrVal) {
   var arrValFirstName = arrVal.firstName.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
   if (valToFindLastName == arrValLastName) {
-    if (arrValFirstName.charAt(0) == valToFind.initials.toLowerCase().charAt(0)) {
+    if (valToFind.initials.toLowerCase().charAt(0) == arrValFirstName.charAt(0)) {
       return 0;
-    } else if (arrValFirstName.charAt(0) > valToFind.initials.toLowerCase().charAt(0)) {
+    } else if (valToFind.initials.toLowerCase().charAt(0) > arrValFirstName.charAt(0)) {
       return 1;
     }
     return -1;
