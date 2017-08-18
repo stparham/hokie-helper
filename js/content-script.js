@@ -11,7 +11,8 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 /** The zero-based index of the course code column in the table; */
 const COURSE_CODE_COL_IDX = 1;
 /** The zero-based index of the instructor column in the table; */
-const INSTRUCTOR_COL_IDX = 6;
+const INSTRUCTOR_COL_IDX = $('td:contains("Instructor")').index();
+//alert(COURSE_CODE_COL_IDX + ", " + INSTRUCTOR_COL_IDX);
 
 /** The data columns to include in the current page; */
 var config = {
@@ -376,6 +377,7 @@ function fillRMPRatingTemplate(profData) {
 
 function fillKoofersRatingTemplate(profData) {
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
+  //var toolTipText = (profData.rating + " / 5 Rating" + " Avg GPA: " profData.g)
   var cell = $(cellTemplates["koofersRatings"]).clone();
   cell.find(".RMPa").attr('href', profData.url);
   cell.find(".RMPatext").attr('style', 'background-color: #' + ratingColor);

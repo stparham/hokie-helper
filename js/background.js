@@ -241,6 +241,13 @@ function getKoofersRatingsFor(subject) {
               if (ratingSpan.length === 1) {
                 profData.rating = ratingSpan[0].innerText;
               }
+              /////////////LOL
+              //var GPASpan = $(this).find('div.content > div.info > span.attr > span.value > span');
+              //if (GPASpan.length === 1) {
+              //  profData.gpa = parseFloat(GPASpan[0].innerText);
+              //}
+              //alert(profData.gpa);
+              /////////////
               var nameLink = $(this).find('div.content > div.title > a');
               if (nameLink.length === 1) {
                 profData.url = "https://www.koofers.com" + nameLink[0].pathname;
