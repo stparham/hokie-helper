@@ -9,6 +9,8 @@
     (Tell them to make sure to check the corresponding sites and verify the information displayed by the extension)
 - Document where all the potential weak points are for the program (basically the points at which parsing will break if ANYTHING changes with the sites the data is coming from)
 - Clean up doAnaanuCraziness() function in background.js
+- Replace all tests that use (typeof blah === 'undefined') with (blah === undefined)
+- WRITE SOME FRIGGIN' TESTS
 
 ## Options
 - Provide options for turning certain columns on and off
