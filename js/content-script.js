@@ -1,3 +1,18 @@
+/**
+ * This file is injected into the course time table web page.
+ * Its main purpose is to:
+ * 1) gather information from the table
+ * 2) store and organize that information
+ * 3) ask the background page to retrieve information (from RMP, Koofers,
+ *    Anaanu, or any other sites) based on the table information
+ * 4) sort through and format the raw data returned by the background page
+ * 5) place that data in new columns in the table on the web page.
+ *
+ * This is where the real "meat" of the Hokie Helper extension resides.
+ *
+ * @author Stanton Parham (stanton8parham8@gmail.com)
+ */
+
 // listen for messages from the background page
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.doAction) {
@@ -8,18 +23,32 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   }
 });
 
+//////////////////////////////////////////
+// WEAK POINT: If the website changes the order of the columns or the titles
+// of the columns, then these constants may not be correct and later code may
+// break as a result.
+//////////////////////////////////////////
 /** The zero-based index of the course code column in the table; */
 const COURSE_CODE_COL_IDX = 1;
 /** The zero-based index of the instructor column in the table; */
 const INSTRUCTOR_COL_IDX = $('td:contains("Instructor")').index();
-//alert(COURSE_CODE_COL_IDX + ", " + INSTRUCTOR_COL_IDX);
 
 /** The data columns to include in the current page; */
 var config = {
+  /* TODO eventually set this up to read the columns to include from the
+     settings that the user sets so they can choose which columns will show */
+
+  /* Obviously, if a column is deselected, then its cells will not show, but
+     I'm not sure if a deselected column should still grab its data from its
+     site.  The main reason I'm not sure is because I think it would be cool if
+     the updates to the table happened as soon as the user deslected a certain
+     column in the settings (a popup from the extension could also show the
+     settings instead of just the settings page).  I may be able to do this
+     either way, but I haven't looked into it yet. */
   "colsToInclude": ["rmp", "koofersRatings", "anaanu"]
 };
 
-// new columns that will be populated by data from RMP, Koofers, and Anaanu
+/** new columns that will be populated by data from RMP, Koofers, and Anaanu */
 var dataCols = {};
 
 /** The subject that is selected at the top of the page; */
@@ -34,7 +63,7 @@ var loadingAnimationURL = chrome.extension.getURL("img/loading.gif");
 var headerTemplates = {};
 var cellTemplates = {};
 
-// load resource files
+// load the resource files (html templates for data cols)
 (function() {
   console.time("resources");
   $.when(
@@ -63,11 +92,17 @@ var cellTemplates = {};
   });
 })();
 
+/**
+ * Gets the subject the user selected at the top of the page;
+ */
 function getSelectedSubject() {
   selectedSubject = $("select[name='subj_code']")[0].value;
-  console.log(selectedSubject);
 }
 
+/**
+ * Traverses the table of course information while grabbing instructor and
+ * course information and inserting new cells for each of the data cols;
+ */
 function traverseTable() {
   // get the column before the point of injection for the new headers
   var instructorHeader = $(".dataentrytable > tbody > tr:first-of-type > td:nth-of-type(" + (INSTRUCTOR_COL_IDX + 1) + ")");
@@ -96,10 +131,15 @@ function traverseTable() {
   // iterates over the rows asynchronously to avoid blocking the UI
   var prom = new Promise(function(resolve, reject) {
     console.time("table traversal");
+    // using the async.min.js lib
     async.whilst(
+      // the continuation test function
       function() { return idx < rows.length; },
+      // the function that does the stuff
       function(callback) {
-        // set a min for how much time should be burnt during this function call
+        /* The burn timeout stuff helps to maximize the advantage (and minimize
+           the disadvantage) of using asynchronous table traversal. */
+        // Set a min for how much time should be burnt during this function call;
         var burnTimeout = new Date();
         burnTimeout.setTime(burnTimeout.getTime() + 50); // burnTimeout set to 50ms in the future
 
@@ -171,12 +211,21 @@ function traverseTable() {
     );
   });
 
+  // once the table traversal is done, fillDataCols will be called
   prom.then(fillDataCols);
 }
 
+/**
+ * Helper function for storing information gathered during the table traversal;
+ * The information is stored in the instructors and courses objects declared
+ * toward the top of the file.
+ * @param {string} name - the name of the instructor to store info about
+ * @param {string} course - the course associated with the instructor
+ * @param {number} cellIdx - the index of the row in the table that the data came from
+ */
 function storeInfo(name, course, cellIdx) {
   // store instructor information
-  if (typeof instructors[name] === 'undefined') {
+  if (typeof instructors[name] === 'undefined') { // if this instructor has not already been stored previously
     var split = name.split(' ');
     var initials = split[0];
     split.splice(0, 1); // get rid of initials
@@ -202,13 +251,13 @@ function storeInfo(name, course, cellIdx) {
       }
     };
   }
-  if (typeof instructors[name].courses[course] === 'undefined') {
+  if (typeof instructors[name].courses[course] === 'undefined') { // if this instructor and course combo has not been stored previously
     instructors[name].courses[course] = course;
   }
-  instructors[name].associatedTableCells.push(cellIdx);
+  instructors[name].associatedTableCells.push(cellIdx); // always store the cell associated with the data because it has to be a new row even if it is a repeat of the data
 
   // store course information
-  if (typeof courses[course] === 'undefined') {
+  if (typeof courses[course] === 'undefined') { // if this course has not been stored previously
     var split = course.split('-');
     courses[course] = {
       "subject": split[0],
@@ -218,7 +267,7 @@ function storeInfo(name, course, cellIdx) {
       "anaanuURL": "http://anaanu.com/virginia-tech-vt/"
     }
   }
-  if (typeof courses[course].instructors[name] === 'undefined') {
+  if (typeof courses[course].instructors[name] === 'undefined') { // if this course and instructor combo has not been stored previously
     courses[course].instructors[name] = {
       "firstName": instructors[name].firstName,
       "lastName": instructors[name].lastName,
@@ -234,11 +283,22 @@ function storeInfo(name, course, cellIdx) {
       "anaanuURL": courses[course].anaanuURL
     }
   }
-  courses[course].instructors[name].associatedTableCells.push(cellIdx);
+  courses[course].instructors[name].associatedTableCells.push(cellIdx); // always store the cell associated with the data because it has to be a new row even if it is a repeat of the data
 }
 
+
+/**
+ * Asks the background page (through the DataService object I wrote in
+ * data-services.js) to retrieve data from all the data sites based on some
+ * bits of information gathered during the table traversal;
+ * Once the data is returned, this function calls a few other functions to fill
+ * the returned data into the new data cols in the table.
+ */
 function fillDataCols() {
   var chain = Promise.resolve("Start Data Retrieval Chain");
+
+  /* TODO Set up some kind of conditional flow so that only the information
+     needed for the columns that the user has selected */
 
   // get RMP ratings
   chain.then(function() {
@@ -262,8 +322,7 @@ function fillDataCols() {
     fillKoofersRatingsCells(undefined);
   });
 
-  // get Koofers GPA
-
+  // TODO get Koofers GPA
 
   // get Anaanu data through a series of separate requests
   Object.keys(courses).forEach(function(crs) {
@@ -283,6 +342,10 @@ function fillDataCols() {
   });
 }
 
+/**
+ * Fills the RMP ratings data column in the table based on the results;
+ * @param {array} results - an array of the ratings from the RMP site
+ */
 function fillRMPCells(results) {
   Object.keys(instructors).forEach(function(inst, i) { // for every instructor
     inst = instructors[inst];
@@ -309,6 +372,10 @@ function fillRMPCells(results) {
   });
 }
 
+/**
+ * Fills the Koofers ratings data column in the table based on the results;
+ * @param {array} results - an array of the ratings from the Koofers site
+ */
 function fillKoofersRatingsCells(results) {
   Object.keys(instructors).forEach(function(inst, i) { // for every instructor
     inst = instructors[inst];
@@ -335,6 +402,10 @@ function fillKoofersRatingsCells(results) {
   });
 }
 
+/**
+ * Fills the Anaanu GPA data column in the table based on the results;
+ * @param {array} results - an array of the stats about instructors from the Anaanu site
+ */
 function fillAnaanuCells(course, results) {
   Object.keys(course.instructors).forEach(function(inst, i) { // for every instructor of that course
     inst = course.instructors[inst];
@@ -364,6 +435,11 @@ function fillAnaanuCells(course, results) {
   });
 }
 
+/**
+ * Fills out and returns a HTML template for an RMP rating data cell;
+ * @param {object} profData - data about the instructor for the cell
+ * @return {string} an HTML string for the filled-out cell
+ */
 function fillRMPRatingTemplate(profData) {
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
   var cell = $(cellTemplates["rmp"]).clone();
@@ -375,6 +451,11 @@ function fillRMPRatingTemplate(profData) {
   return cell.prop('outerHTML');
 }
 
+/**
+ * Fills out and returns a HTML template for a Koofers rating data cell;
+ * @param {object} profData - data about the instructor for the cell
+ * @return {string} an HTML string for the filled-out cell
+ */
 function fillKoofersRatingTemplate(profData) {
   var ratingColor = (profData.hasRating) ? getRatingColor(profData.rating) : 'CCC';
   //var toolTipText = (profData.rating + " / 5 Rating" + " Avg GPA: " profData.g)
@@ -387,6 +468,11 @@ function fillKoofersRatingTemplate(profData) {
   return cell.prop('outerHTML');
 }
 
+/**
+ * Fills out and returns a HTML template for an Anaanu GPA data cell;
+ * @param {object} courseData - data about the course for the cell
+ * @return {string} an HTML string for the filled-out cell
+ */
 function fillAnaanuGPATemplate(courseData) {
   var ratingColor = (courseData.hasGPA) ? getGPAColor(courseData.avgGPA) : 'CCC';
   var cell = $(cellTemplates["anaanu"]).clone();
@@ -398,11 +484,21 @@ function fillAnaanuGPATemplate(courseData) {
   return cell.prop('outerHTML');
 }
 
+/**
+ * Returns the color associated with the given rating;
+ * @param {number} rating - the rating to get the color for
+ * @return {string} a hexadecimal color code as a string
+ */
 function getRatingColor(rating) {
   var ratingColors = ['F91D06'/*red*/, 'FC6F22'/*orange*/, 'E6D600'/*yellow*/, '4EEB51'/*light green*/, '00B13D'/*dark green*/];
   return ratingColors[Math.floor((rating - 1) / 4.01 * ratingColors.length)];
 }
 
+/**
+ * Returns the color associated with the given gpa;
+ * @param {number} gpa - the gpa to get the color of
+ * @return {string} a hexadecimal color code as a string
+ */
 function getGPAColor(gpa) {
   var colors = {
     "red": 'F91D06',
@@ -420,14 +516,22 @@ function getGPAColor(gpa) {
 
 
 
-/////////////////// Comparator Functions
+//////////////////////////////// Comparator Functions
+/* These functions are used with the bin-search.js lib in order to look throug
+   the results from the data sites quickly. */
 
+/**
+ * Used as the comparator function when searching through Rate My Professor ratings results;
+ * @param {object} valToFind - the value to find in the array of results
+ * @param {object} arrVal - the value in the array of results currently being compared against
+ * @return {number} -1 if valToFind < arrVal, 0 if valToFind = arrVal, 1 if valToFind > arrVal
+ */
 function rmpSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.teacherlastname_t.toLowerCase();
   var arrValFirstName = arrVal.teacherfirstname_t.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
   if (valToFindLastName == arrValLastName) {
-    if ( valToFind.initials.toLowerCase().charAt(0) == arrValFirstName.charAt(0)) {
+    if (valToFind.initials.toLowerCase().charAt(0) == arrValFirstName.charAt(0)) {
       return 0;
     } else if (valToFind.initials.toLowerCase().charAt(0) > arrValFirstName.charAt(0)) {
       return 1;
@@ -441,6 +545,12 @@ function rmpSearchComparator(valToFind, arrVal) {
   }
 }
 
+/**
+ * Used as the comparator function when searching through Koofers ratings results;
+ * @param {object} valToFind - the value to find in the array of results
+ * @param {object} arrVal - the value in the array of results currently being compared against
+ * @return {number} -1 if valToFind < arrVal, 0 if valToFind = arrVal, 1 if valToFind > arrVal
+ */
 function koofersRatingsSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.lastName.toLowerCase();
   var arrValFirstName = arrVal.firstName.toLowerCase();
@@ -460,6 +570,12 @@ function koofersRatingsSearchComparator(valToFind, arrVal) {
   }
 }
 
+/**
+ * Used as the comparator function when searching through Anaanu GPA results;
+ * @param {object} valToFind - the value to find in the array of results
+ * @param {object} arrVal - the value in the array of results currently being compared against
+ * @return {number} -1 if valToFind < arrVal, 0 if valToFind = arrVal, 1 if valToFind > arrVal
+ */
 function anaanuSearchComparator(valToFind, arrVal) {
   var arrValLastName = arrVal.instructor.toLowerCase();
   var valToFindLastName = valToFind.lastName.toLowerCase();
@@ -470,26 +586,4 @@ function anaanuSearchComparator(valToFind, arrVal) {
     return 1;
   }
   return -1;
-}
-
-
-function asyncHelper(array, performFunc, checkFunc) {
-  return new Promise(function(resolve, reject) {
-    loop();
-    function loop() {
-      if (checkFunc()) {
-        setTimeout(loop, 0);
-      } else {
-        resolve();
-        return;
-      }
-
-      var burnTimeout = new Date();
-      burnTimeout.setTime(burnTimeout.getTime() + 50); // burnTimeout set to 50ms in the future
-
-      do {
-        performFunc(array);
-      } while ((new Date()) < burnTimeout && checkFunc());
-    }
-  });
 }
