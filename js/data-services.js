@@ -1,8 +1,15 @@
+/**
+ * Just declaring a DataService object so that the following functions can be attached to it;
+ */
 function DataService() {
-  this.name = "DataService";
+  this.name = "DataService"; // pointless but I thought the object might need
+                             // at least one thing when it's declared (probably not)
 }
 
-// gets all the RMP ratings for the professors at Virginia Tech
+/**
+ * Asks the background page to get all the RMP ratings for the professors at Virginia Tech;
+ * @return {Promise} a Promise that resolves with an array of the ratings from RMP
+ */
 DataService.getRMPRatings = function() {
   return new Promise(function(resolve, reject) {
     chrome.runtime.sendMessage({
@@ -30,7 +37,11 @@ DataService.getRMPRatings = function() {
   });
 };
 
-// gets all the Koofers ratings for professors within a certain subject
+/**
+ * Asks the background page to get all the Koofers ratings for professors within a certain subject;
+ * @param {string} subject - the subject to get professor ratings for
+ * @return {Promise} a Promise that resolves with an array of the ratings from Koofers
+ */
 DataService.getKoofersRatingsFor = function(subject) {
   return new Promise(function(resolve, reject) {
     chrome.runtime.sendMessage({
@@ -59,7 +70,13 @@ DataService.getKoofersRatingsFor = function(subject) {
   })
 };
 
-// gets all the Koofers average GPAs for professors within a certain course
+/**
+ * Asks the background page to get all the Koofers average GPAs for professors within a certain course;
+ * @param {string} courseSubj - the subject of the course
+ * @param {string} courseNum - the number of the course
+ * @param {string} courseTitle - the title of the course
+ * @return {Promise} a Promise that resolves with an array of the GPAs from Koofers
+ */
 DataService.getKoofersGPAFor = function(courseSubj, courseNum, courseTitle) {
   return new Promise(function(resolve, reject) {
     chrome.runtime.sendMessage({
@@ -77,7 +94,11 @@ DataService.getKoofersGPAFor = function(courseSubj, courseNum, courseTitle) {
   })
 };
 
-// gets all the Anaanu data for professors within a certain course
+/**
+ * Asks the background page to get all the Anaanu data for professors within a certain course;
+ * @param {string} course - the course code (in the format SUBJ+3333; ex: MATH+1225)
+ * @return {Promise} a Promise that resolves with an array of the ratings from RMP
+ */
 DataService.getAnaanuDataFor = function(course) {
   return new Promise(function(resolve, reject) {
     chrome.runtime.sendMessage({
